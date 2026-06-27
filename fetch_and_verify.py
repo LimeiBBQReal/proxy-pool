@@ -63,6 +63,7 @@ def fetch_source(entry: dict[str, Any]) -> list[dict[str, Any]]:
     name = entry.get("name", "unknown")
     url = entry.get("url", "")
     source_type = entry.get("type", "mixed")
+    source_format = entry.get("format", "")
     if not url:
         return []
 
@@ -75,10 +76,55 @@ def fetch_source(entry: dict[str, Any]) -> list[dict[str, Any]]:
         return []
 
     proxies: list[dict[str, Any]] = []
+
+    # JSON 格式 (geonode 等 API)
+    if source_format == "json":
+        try:
+            data = json.loads(text)
+            items = data.get("data", []) if isinstance(data, dict) else data
+            for item in items:
+                ip = item.get("ip") or item.get("IP") or ""
+                port_raw = item.get("port") or item.get("PORT") or 0
+                if not ip or not port_raw:
+                    continue
+                try:
+                    port = int(port_raw)
+                except (ValueError, TypeError):
+                    continue
+                if port < 1 or port > 65535:
+                    continue
+                proto_str = ""
+                if item.get("protocols"):
+                    p0 = item["protocols"][0] if isinstance(item["protocols"], list) else item["protocols"]
+                    proto_str = str(p0).lower()
+                proto = "socks5" if "socks" in proto_str else "http"
+                proxies.append({"ip": ip, "port": port, "protocol": proto, "source": name})
+        except Exception as e:
+            print(f"  [WARN] {name} JSON 解析失败: {e}", file=sys.stderr)
+        print(f"  [OK] {name}: {len(proxies)} 条", file=sys.stderr)
+        return proxies
+
+    # CSV / 文本格式
     for line in text.splitlines():
         line = line.strip()
         if not line:
             continue
+
+        if source_format == "csv":
+            parts = line.split(",")
+            if len(parts) < 2:
+                continue
+            ip, port_s = parts[0].strip(), parts[1].strip()
+            try:
+                port = int(port_s)
+            except ValueError:
+                continue
+            if port < 1 or port > 65535:
+                continue
+            proxies.append({"ip": ip, "port": port, "protocol": source_type, "source": name})
+            continue
+
+        # 默认 ip:port 文本格式
         m = IP_PORT_RE.search(line)
         if not m:
             continue
