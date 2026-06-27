@@ -36,6 +36,63 @@ IP_PORT_RE = re.compile(r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):(\d{2,5})")
 SOCKS5_PORTS = {1080, 10808, 9050, 9150, 1081, 1086, 7890}
 
 
+# ── AES-256-CBC 加解密 (与 proxy_pool_client.py 共享同一套) ─────
+def _derive_key(key: str) -> bytes:
+    """从任意长度字符串派生 32 字节 AES key (SHA256)."""
+    return hashlib.sha256(key.encode("utf-8")).digest()[:32]
+
+
+def aes_encrypt(plaintext: str, key: str) -> bytes:
+    """AES-256-CBC 加密, 返回 iv + ciphertext 二进制."""
+    try:
+        from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+        from cryptography.hazmat.primitives import padding
+        key_bytes = _derive_key(key)
+        iv = os.urandom(16)
+        padder = padding.PKCS7(128).padder()
+        padded = padder.update(plaintext.encode("utf-8")) + padder.finalize()
+        cipher = Cipher(algorithms.AES(key_bytes), modes.CBC(iv))
+        encryptor = cipher.encryptor()
+        ct = encryptor.update(padded) + encryptor.finalize()
+        return iv + ct
+    except ImportError:
+        from Crypto.Cipher import AES
+        from Crypto.Util.Padding import pad
+        key_bytes = _derive_key(key)
+        iv = os.urandom(16)
+        cipher = AES.new(key_bytes, AES.MODE_CBC, iv)
+        ct = cipher.encrypt(pad(plaintext.encode("utf-8"), AES.block_size))
+        return iv + ct
+
+
+def aes_decrypt(encrypted: bytes, key: str) -> str:
+    """AES-256-CBC 解密, 输入是 iv + ciphertext 二进制."""
+    try:
+        from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+        from cryptography.hazmat.primitives import padding
+        key_bytes = _derive_key(key)
+        iv = encrypted[:16]
+        ct = encrypted[16:]
+        cipher = Cipher(algorithms.AES(key_bytes), modes.CBC(iv))
+        decryptor = cipher.decryptor()
+        padded = decryptor.update(ct) + decryptor.finalize()
+        unpadder = padding.PKCS7(128).unpadder()
+        plaintext = unpadder.update(padded) + unpadder.finalize()
+        return plaintext.decode("utf-8")
+    except ImportError:
+        from Crypto.Cipher import AES
+        from Crypto.Util.Padding import unpad
+        key_bytes = _derive_key(key)
+        iv = encrypted[:16]
+        ct = encrypted[16:]
+        cipher = AES.new(key_bytes, AES.MODE_CBC, iv)
+        return unpad(cipher.decrypt(ct), AES.block_size).decode("utf-8")
+
+
+# 保留旧名做向后兼容
+_aes_encrypt = aes_encrypt
+
+
 def load_config() -> dict[str, Any]:
     cfg_path = ROOT / "sources.json"
     return json.loads(cfg_path.read_text(encoding="utf-8"))
@@ -143,8 +200,17 @@ def collect_all(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """拉取所有源并去重."""
     print(f"[1/4] 拉取 {len(sources)} 个代理源...", file=sys.stderr)
     pool: list[dict[str, Any]] = []
+    per_source_count: dict[str, int] = {}
     for entry in sources:
-        pool.extend(fetch_source(entry))
+        name = entry.get("name", "unknown")
+        before = len(pool)
+        rows = fetch_source(entry)
+        pool.extend(rows)
+        per_source_count[name] = len(rows)
+        print(
+            f"  [FETCH] {name}: {len(rows)} 条 (累计 {len(pool)})",
+            file=sys.stderr,
+        )
 
     # 去重 (ip:port 唯一, 保留第一次出现的协议)
     seen: set[str] = set()
@@ -158,6 +224,16 @@ def collect_all(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
     proto_counts: dict[str, int] = {}
     for p in uniq:
         proto_counts[p["protocol"]] = proto_counts.get(p["protocol"], 0) + 1
+
+    # 列出无产出的源
+    empty_sources = [
+        e.get("name", "?") for e in sources if per_source_count.get(e.get("name", "?"), 0) == 0
+    ]
+    if empty_sources:
+        print(
+            f"  [WARN] 无产出源 ({len(empty_sources)}): {empty_sources}",
+            file=sys.stderr,
+        )
 
     print(
         f"  合计 {len(uniq)} 个唯一代理 (原始 {len(pool)}), 协议: {proto_counts}",
@@ -232,28 +308,8 @@ def verify_all(
 
 
 def _aes_encrypt(plaintext: str, key: str) -> bytes:
-    """AES-256-CBC 加密, 返回 iv + ciphertext 的二进制."""
-    try:
-        from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-        from cryptography.hazmat.primitives import padding
-    except ImportError:
-        # 没装 cryptography, 用 PyCryptodome
-        from Crypto.Cipher import AES
-        from Crypto.Util.Padding import pad
-        key_bytes = hashlib.sha256(key.encode()).digest()[:32]
-        iv = os.urandom(16)
-        cipher = AES.new(key_bytes, AES.MODE_CBC, iv)
-        ct = cipher.encrypt(pad(plaintext.encode("utf-8"), AES.block_size))
-        return iv + ct
-
-    key_bytes = hashlib.sha256(key.encode()).digest()[:32]
-    iv = os.urandom(16)
-    padder = padding.PKCS7(128).padder()
-    padded = padder.update(plaintext.encode("utf-8")) + padder.finalize()
-    cipher = Cipher(algorithms.AES(key_bytes), modes.CBC(iv))
-    encryptor = cipher.encryptor()
-    ct = encryptor.update(padded) + encryptor.finalize()
-    return iv + ct
+    """兼容别名: 实际调用 aes_encrypt."""
+    return aes_encrypt(plaintext, key)
 
 
 def emit(results: list[dict[str, Any]]) -> None:
@@ -272,6 +328,29 @@ def emit(results: list[dict[str, Any]]) -> None:
     http_text = "\n".join(f"{r['ip']}:{r['port']}" for r in alive_http) + "\n" if alive_http else ""
     socks5_text = "\n".join(f"{r['ip']}:{r['port']}" for r in alive_socks5) + "\n" if alive_socks5 else ""
 
+    # ── 源级统计 (fetched/alive/成功率) ──
+    source_stats: dict[str, dict[str, int]] = {}
+    for r in results:
+        s = r.get("source", "") or "unknown"
+        st = source_stats.setdefault(s, {"fetched": 0, "alive": 0, "errors": 0})
+        st["fetched"] += 1
+        if r["alive"]:
+            st["alive"] += 1
+        if not r["alive"] and r.get("latency_ms", 0) >= 4000:
+            st["errors"] += 1
+
+    source_stats_list = []
+    for s in sorted(source_stats.keys()):
+        st = source_stats[s]
+        rate = f"{st['alive'] / st['fetched'] * 100:.1f}%" if st["fetched"] else "-"
+        source_stats_list.append({
+            "name": s,
+            "fetched": st["fetched"],
+            "alive": st["alive"],
+            "errors": st["errors"],
+            "hit_rate": rate,
+        })
+
     meta = {
         "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "total_tested": len(results),
@@ -285,6 +364,7 @@ def emit(results: list[dict[str, Any]]) -> None:
             1,
         ),
         "sources": sorted(set(r.get("source", "") for r in results if r["alive"])),
+        "source_stats": source_stats_list,
     }
     meta_text = json.dumps(meta, indent=2, ensure_ascii=False)
 
