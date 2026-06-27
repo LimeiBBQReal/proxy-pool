@@ -43,6 +43,7 @@
   ],
   "probe": {
     "url": "http://www.gstatic.com/generate_204",
+    "fallback_url": "https://cp.cloudflare.com/generate_204",
     "expect_status": 204,
     "timeout_http": 4,
     "timeout_socks5": 8

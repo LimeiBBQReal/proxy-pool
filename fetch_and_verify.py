@@ -264,18 +264,34 @@ def probe_one(proxy: dict[str, Any], probe_cfg: dict[str, Any]) -> dict[str, Any
     protocol = proxy.get("protocol", "http")
     proxies = build_proxy_dict(ip, port, protocol)
     timeout = _resolve_timeout(protocol, probe_cfg)
+    urls = [probe_cfg["url"]]
+    if probe_cfg.get("fallback_url"):
+        urls.append(probe_cfg["fallback_url"])
 
-    t0 = time.time()
-    try:
-        r = requests.get(
-            probe_cfg["url"],
-            proxies=proxies,
-            timeout=timeout,
-            allow_redirects=False,
-        )
-        alive = r.status_code == probe_cfg["expect_status"]
-    except Exception:
-        alive = False
+    for attempt, url in enumerate(urls, 1):
+        t0 = time.time()
+        try:
+            r = requests.get(
+                url,
+                proxies=proxies,
+                timeout=timeout,
+                allow_redirects=False,
+            )
+            alive = r.status_code == probe_cfg["expect_status"]
+            return {
+                "ip": ip,
+                "port": port,
+                "protocol": protocol,
+                "source": proxy.get("source", ""),
+                "alive": alive,
+                "latency_ms": round((time.time() - t0) * 1000, 1),
+            }
+        except requests.exceptions.Timeout:
+            if attempt < len(urls):
+                continue
+            alive = False
+        except Exception:
+            alive = False
 
     return {
         "ip": ip,
@@ -402,6 +418,7 @@ def main() -> int:
     sources = cfg.get("sources", [])
     probe_cfg = cfg.get("probe", {
         "url": "http://www.gstatic.com/generate_204",
+        "fallback_url": "https://cp.cloudflare.com/generate_204",
         "expect_status": 204,
         "timeout_http": 4,
         "timeout_socks5": 8,
