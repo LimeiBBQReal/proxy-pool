@@ -13,18 +13,6 @@
       "preverified": true
     },
     {
-      "name": "clarketm",
-      "url": "https://raw.githubusercontent.com/clarketm/proxy-list/master/proxy-list-raw.txt",
-      "type": "http",
-      "preverified": true
-    },
-    {
-      "name": "roosterkid-socks5",
-      "url": "https://raw.githubusercontent.com/roosterkid/openproxylist/main/SOCKS5_RAT.txt",
-      "type": "socks5",
-      "preverified": true
-    },
-    {
       "name": "proxifly-http",
       "url": "https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/protocols/http/data.txt",
       "type": "http",
@@ -37,61 +25,13 @@
       "type": "socks5",
       "preverified": true,
       "note": "SOCKS5 版本"
-    },
-    {
-      "name": "proxyscrape-http-api",
-      "url": "https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&proxy_format=protocolip&format=text&protocol=http",
-      "type": "http",
-      "note": "1分钟刷新, API端点"
-    },
-    {
-      "name": "proxyscrape-socks5-api",
-      "url": "https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&proxy_format=protocolip&format=text&protocol=socks5",
-      "type": "socks5",
-      "note": "SOCKS5 API端点"
-    },
-    {
-      "name": "iplocate-http",
-      "url": "https://raw.githubusercontent.com/iplocate/free-proxy-list/main/proxy/types/http/data.txt",
-      "type": "http",
-      "preverified": true,
-      "note": "30分钟验证"
-    },
-    {
-      "name": "thordata-http",
-      "url": "https://raw.githubusercontent.com/Thordata/awesome-free-proxy-list/main/proxy/csv/http/data.csv",
-      "type": "http",
-      "preverified": true,
-      "note": "每日验证, CSV格式"
-    },
-    {
-      "name": "ProxyScraper-http",
-      "url": "https://raw.githubusercontent.com/ProxyScraper/ProxyScraper/refs/heads/main/http.txt",
-      "type": "http"
-    },
-    {
-      "name": "ProxyScraper-socks5",
-      "url": "https://raw.githubusercontent.com/ProxyScraper/ProxyScraper/refs/heads/main/socks5.txt",
-      "type": "socks5"
-    },
-    {
-      "name": "geonode-api",
-      "url": "https://proxylist.geonode.com/api/proxy-list?limit=500&page=1&sort_by=lastChecked&sort_type=desc&protocols=http,https",
-      "type": "http",
-      "format": "json",
-      "note": "JSON API, 500条按最近验证排序"
-    },
-    {
-      "name": "pubproxy-api",
-      "url": "http://pubproxy.com/api/proxylist?format=txt",
-      "type": "http",
-      "note": "纯文本API"
     }
   ],
   "probe": {
-    "url": "https://www.google.com/generate_204",
+    "url": "https://cp.cloudflare.com/generate_204",
     "expect_status": 204,
-    "timeout": 4
+    "timeout_http": 4,
+    "timeout_socks5": 8
   },
   "workers": 100
 }

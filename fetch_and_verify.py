@@ -249,19 +249,28 @@ def build_proxy_dict(ip: str, port: int, protocol: str) -> dict[str, str]:
     return {"http": f"http://{ip}:{port}", "https": f"http://{ip}:{port}"}
 
 
+def _resolve_timeout(protocol: str, probe_cfg: dict[str, Any]) -> int | float:
+    """按协议读取超时: SOCKS5 三次握手较慢, 单独放宽."""
+    proto_key = (protocol or "").lower()
+    if proto_key == "socks5":
+        return probe_cfg.get("timeout_socks5", probe_cfg.get("timeout", 8))
+    return probe_cfg.get("timeout_http", probe_cfg.get("timeout", 4))
+
+
 def probe_one(proxy: dict[str, Any], probe_cfg: dict[str, Any]) -> dict[str, Any]:
     """单探针测活, 返回 {alive, latency_ms, protocol, ip, port}."""
     ip = proxy["ip"]
     port = proxy["port"]
     protocol = proxy.get("protocol", "http")
     proxies = build_proxy_dict(ip, port, protocol)
+    timeout = _resolve_timeout(protocol, probe_cfg)
 
     t0 = time.time()
     try:
         r = requests.get(
             probe_cfg["url"],
             proxies=proxies,
-            timeout=probe_cfg["timeout"],
+            timeout=timeout,
             allow_redirects=False,
         )
         alive = r.status_code == probe_cfg["expect_status"]
@@ -283,7 +292,7 @@ def verify_all(
 ) -> list[dict[str, Any]]:
     """并发测活."""
     total = len(proxies)
-    print(f"[2/4] 测活 {total} 个代理 ({workers} 并发, {probe_cfg['timeout']}s 超时)...", file=sys.stderr)
+    print(f"[2/4] 测活 {total} 个代理 ({workers} 并发, http={probe_cfg.get('timeout_http', probe_cfg.get('timeout', 4))}s / socks5={probe_cfg.get('timeout_socks5', probe_cfg.get('timeout', 8))}s)...", file=sys.stderr)
 
     results: list[dict[str, Any]] = []
     with ThreadPoolExecutor(max_workers=workers) as ex:
@@ -392,9 +401,10 @@ def main() -> int:
     cfg = load_config()
     sources = cfg.get("sources", [])
     probe_cfg = cfg.get("probe", {
-        "url": "https://www.google.com/generate_204",
+        "url": "https://cp.cloudflare.com/generate_204",
         "expect_status": 204,
-        "timeout": 4,
+        "timeout_http": 4,
+        "timeout_socks5": 8,
     })
     workers = cfg.get("workers", 100)
 
