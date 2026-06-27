@@ -2,13 +2,10 @@ name: Refresh Proxy Pool
 
 on:
   schedule:
-    # 每 10 分钟跑一次 (GitHub Actions cron 最稳定频率)
-    - cron: '*/10 * * * *'
+    # 每 5 分钟跑一次 (GitHub Actions schedule 经常延迟 15-30 分钟, 配密一点)
+    - cron: '*/5 * * * *'
   workflow_dispatch:
     inputs:
-      probe_timeout:
-        description: '单探针超时(秒)'
-        default: '4'
       workers:
         description: '并发数'
         default: '100'
@@ -34,18 +31,8 @@ jobs:
 
       - name: Fetch & Verify & Encrypt
         env:
-          PROBE_TIMEOUT: ${{ github.event.inputs.probe_timeout || '4' }}
-          WORKERS: ${{ github.event.inputs.workers || '100' }}
           PROXY_AES_KEY: ${{ secrets.PROXY_AES_KEY }}
-        run: |
-          python -c "
-          import json, os
-          cfg = json.load(open('sources.json'))
-          cfg['probe']['timeout'] = int(os.environ.get('PROBE_TIMEOUT', '4'))
-          cfg['workers'] = int(os.environ.get('WORKERS', '100'))
-          json.dump(cfg, open('sources.json','w'), indent=2, ensure_ascii=False)
-          "
-          python fetch_and_verify.py
+        run: python fetch_and_verify.py
 
       - name: Commit encrypted files
         env:
