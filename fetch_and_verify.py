@@ -401,7 +401,7 @@ def main() -> int:
     cfg = load_config()
     sources = cfg.get("sources", [])
     probe_cfg = cfg.get("probe", {
-        "url": "https://cp.cloudflare.com/generate_204",
+        "url": "http://www.gstatic.com/generate_204",
         "expect_status": 204,
         "timeout_http": 4,
         "timeout_socks5": 8,
