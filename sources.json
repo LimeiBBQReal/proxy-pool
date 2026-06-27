@@ -1,0 +1,54 @@
+{
+  "sources": [
+    {
+      "name": "TheSpeedX-http",
+      "url": "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt",
+      "type": "http",
+      "preverified": true
+    },
+    {
+      "name": "TheSpeedX-socks5",
+      "url": "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/socks5.txt",
+      "type": "socks5",
+      "preverified": true
+    },
+    {
+      "name": "clarketm",
+      "url": "https://raw.githubusercontent.com/clarketm/proxy-list/master/proxy-list-raw.txt",
+      "type": "http",
+      "preverified": true
+    },
+    {
+      "name": "roosterkid-socks5",
+      "url": "https://raw.githubusercontent.com/roosterkid/openproxylist/main/SOCKS5_RAT.txt",
+      "type": "socks5",
+      "preverified": true
+    },
+    {
+      "name": "ProxyScraper-http",
+      "url": "https://raw.githubusercontent.com/ProxyScraper/ProxyScraper/refs/heads/main/http.txt",
+      "type": "http"
+    },
+    {
+      "name": "ProxyScraper-socks5",
+      "url": "https://raw.githubusercontent.com/ProxyScraper/ProxyScraper/refs/heads/main/socks5.txt",
+      "type": "socks5"
+    },
+    {
+      "name": "ProxyScrape-all",
+      "url": "https://raw.githubusercontent.com/ProxyScrape/free-proxy-list/refs/heads/main/proxies/all/data.txt",
+      "type": "mixed"
+    },
+    {
+      "name": "proxifly-all",
+      "url": "https://raw.githubusercontent.com/proxifly/free-proxy-list/refs/heads/main/proxies/all/data.txt",
+      "type": "mixed"
+    }
+  ],
+  "probe": {
+    "url": "https://www.google.com/generate_204",
+    "expect_status": 204,
+    "timeout": 4
+  },
+  "workers": 100
+}

@@ -1,0 +1,63 @@
+name: Refresh Proxy Pool
+
+on:
+  schedule:
+    # 每 10 分钟跑一次 (GitHub Actions cron 最稳定频率)
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+    inputs:
+      probe_timeout:
+        description: '单探针超时(秒)'
+        default: '4'
+      workers:
+        description: '并发数'
+        default: '100'
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: pip install requests pysocks cryptography
+
+      - name: Fetch & Verify & Encrypt
+        env:
+          PROBE_TIMEOUT: ${{ github.event.inputs.probe_timeout || '4' }}
+          WORKERS: ${{ github.event.inputs.workers || '100' }}
+          PROXY_AES_KEY: ${{ secrets.PROXY_AES_KEY }}
+        run: |
+          python -c "
+          import json, os
+          cfg = json.load(open('sources.json'))
+          cfg['probe']['timeout'] = int(os.environ.get('PROBE_TIMEOUT', '4'))
+          cfg['workers'] = int(os.environ.get('WORKERS', '100'))
+          json.dump(cfg, open('sources.json','w'), indent=2, ensure_ascii=False)
+          "
+          python fetch_and_verify.py
+
+      - name: Commit encrypted files
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # 只 commit 加密文件, 不 commit 明文 meta.json
+          git add alive/http.enc alive/socks5.enc alive/meta.enc
+          if git diff --cached --quiet; then
+            echo "无变化, 跳过 commit"
+          else
+            git commit -m "refresh: $(date -u '+%Y-%m-%d %H:%M') UTC"
+            git push
+          fi
